@@ -1,0 +1,6 @@
+output/
+logs/
+data/processed/
+data/validation/
+*.log
+__pycache__/
