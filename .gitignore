@@ -1,4 +1,5 @@
 output/
+tests/
 logs/
 data/processed/
 data/validation/
