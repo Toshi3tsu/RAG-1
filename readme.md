@@ -10,7 +10,7 @@ This is a **Retrieval-Augmented Generation (RAG)** system built with Streamlit, 
 - **Customizable Chunking**: Processes documents in pre-defined or dynamically sized chunks.
 
 ## Demo
-![App Screenshot](screenshot.png)
+![App Screenshot](App_Screenshot.png)
 
 ## Installation
 
