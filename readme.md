@@ -1,135 +1,72 @@
-# 配布データと応募用ファイル作成方法の説明
+# RAG Application with Streamlit
 
-本コンペティションで配布されるデータと応募用ファイルの作成方法や投稿する際の注意点について説明する.
+## Overview
+This is a **Retrieval-Augmented Generation (RAG)** system built with Streamlit, leveraging **OpenAI's GPT model**, FAISS for vector-based document search, and Neo4j for graph-based metadata exploration. The application enables efficient question-answering and document metadata extraction.
 
-1. [配布データ](#配布データ)
-1. [応募用ファイルについて](#応募用ファイルについて)
-1. [精度評価](#精度評価)
-1. [投稿時の注意点](#投稿時の注意点)
+## Features
+- **Question Answering**: Combines semantic search with a retrieval-augmented generation pipeline.
+- **Document Metadata Extraction**: Extracts key information such as title, author, themes, and synopsis from documents.
+- **Graph Integration**: Integrates Neo4j for advanced metadata querying.
+- **Customizable Chunking**: Processes documents in pre-defined or dynamically sized chunks.
 
-## 配布データ
+## Demo
+![App Screenshot](screenshot.png)
 
-配布されるデータは以下の通り.
+## Installation
 
-- [Readme](#readme)
-- [質問データ](#質問データ)
-- [参照元データ](#参照元データ)
-- [検証用データ](#検証用データ)
-- [評価用のプログラム](#評価用のプログラム)
-- [応募用サンプルファイル](#応募用サンプルファイル)
+1. Clone the repository:
+   ```bash
+   git clone https://github.com/yourusername/rag-app.git
+   cd rag-app
+   ```
 
-### Readme
+2. Install the required dependencies:
+   ```bash
+   pip install -r requirements.txt
+   ```
 
-本ファイル(`readme.md`)で, 配布用データの説明と応募用ファイルの作成方法を説明したドキュメント. マークダウン形式で, プレビューモードで見ることを推奨する.
+3. Set up environment variables:
+   - Add your OpenAI API key:
+     ```bash
+     export OPENAI_API_KEY="your-api-key-here"
+     ```
 
-### 質問データ
+4. Run the Streamlit app:
+   ```bash
+   streamlit run app.py
+   ```
 
-`query.csv`という名前のcsvファイルで, 以下のような形式である.
+## Usage
+1. **Upload a Document**:
+   - Use the file uploader in the sidebar to upload `.txt` files for processing.
 
-| カラム名 | 内容 |
-| ---- | ---- |
-| test_id | 問題番号 |
-| problem | 問題 |
+2. **Process the Document**:
+   - Select chunking options and click "Process Document" to split and vectorize the document.
 
-### 参照元データ
+3. **Ask Questions**:
+   - Input a question in the RAG or Simple Chat mode and receive answers based on the processed documents.
 
-`novels.zip`で, 解凍すると以下の様なデータが作成される. `1.txt`,...,`7.txt`にはそれぞれ小説が書かれていて, [質問データ](#質問データ)の問題はこれらをもとに作成されたものである.
+4. **Download Results**:
+   - Metadata, chunks, and vectorized data can be downloaded for further use.
 
-```bash
-novels
-├── 1.txt
-├── ...
-└── 7.txt
+## Technologies Used
+- **Streamlit**: User interface for document upload and interaction.
+- **OpenAI GPT**: Natural language understanding and generation.
+- **FAISS**: Fast vector similarity search.
+- **Neo4j**: Graph-based metadata storage and querying.
+
+## Project Structure
+```
+rag-app/
+├── app.py               # Main Streamlit application
+├── requirements.txt     # Python dependencies
+├── data/                # Sample data or processed files
+├── README.md            # Project description
+└── other-scripts/       # Supporting modules or utilities
 ```
 
-### 検証用データ
+## Contributing
+Feel free to fork this repository and contribute by submitting pull requests.
 
-ある一つの小説とその問題例と模範解答データセット. `valiatation.zip`で, 解凍すると以下のようなデータが作成される.
-
-```bash
-validation
-├── ans_txt.csv
-└── novel.txt
-```
-
-`novel.txt`は小説のテキストデータで, `ans_txt.csv`は例題を含んだその模範解答. 内容は以下の通り.
-
-| カラム名 | 内容 |
-| ---- | ---- |
-| problem | 問題文 |
-| ground_truth | 対応する問題に対する模範解答 |
-| evidence | 回答の根拠. `novel.txt`から内容を抜粋したものとする. 存在しないと判断される場合は「なし」などと記載する.|
-
-問題の傾向の把握, 回答の仕方の検討, 精度評価のテストなどに活用されたい.
-
-### 評価用のプログラム
-
-`evaluation.zip`で, 解凍すると以下のようなデータが作成される.
-
-```bash
-evaluation
-├── data                 解答データを置いたディレクトリ
-│   └── ans_txt.csv
-├── src                  ソースを置いたディレクトリ
-│   ├── dbmanager.py
-│   ├── evaluator.py
-│   ├── settings.py
-│   └── validator.py
-├── submit               予測回答データを置いたディレクトリ
-│   └── predictions.csv
-├── crag.py              精度評価を実行するプログラム
-├── docker-compose.yml   分析環境を構築するためのdocker-composeファイル
-├── Dockerfile           分析環境元のDockerファイル
-└── readme.md            説明ドキュメント
-```
-
-使い方は同封してある`readme.md`を参照されたい.
-
-### 応募用サンプルファイル
-
-`sample_submit.zip`で, 解凍すると以下のようなデータが作成される.
-
-```bash
-sample_submit
-└── predictions.csv   回答ファイル
-```
-
-応募用ファイルを作成する際の参考にされたい.
-
-## 応募用ファイルについて
-
-[質問データ](#質問データ)に対する回答ファイルをzipファイルで圧縮したものとする. 以下のようなディレクトリ構造となっていることを想定している.
-
-```bash
-submit
-└── predictions.csv   回答ファイル
-```
-
-回答ファイルは`predictions.csv`という名前のcsv形式のファイルにすること. **ヘッダーなし**で, 以下のような形式とする.
-
-| カラム番号 | 内容 |
-| ---- | ---- |
-| 1 | 問題番号. [質問データ](#質問データ)の問題番号と紐づく. |
-| 2 | 対応する問題に対する回答. |
-| 3 | 回答の根拠. [参照元](#参照元データ)から内容を抜粋したものとする. 存在しないと判断される場合は「なし」などと記載する.|
-
-カラム番号の順番に内容を左から記載すること. [応募用サンプルファイル](#応募用サンプルファイル)も参照されたい. `predictions.csv`が作成できたら, 上記のディレクトリ構造となっていることを確認して, zipファイルとして圧縮すると応募用ファイルは完成となる.
-
-### 回答に関する注意点
-
-- 参照元の小説から回答を導くこと.
-- 数量で答える問題の回答には単位を付けること.
-- 参照元に答えの手がかりが見つからないと判断される場合はその旨を「分かりません」と答えること.
-- 質問自体に誤りがあると判断される場合は「質問誤り」と答えること.
-- [質問データ](#質問データ)の問題に過不足なく回答すること.
-- 各回答にはトークン数の上限があるので, 超えないようにすること. 今回の上限は**50**.
-- 回答の根拠は今回のコンペティションでは評価に加味されないが, 終了後別軸での評価で利用する想定なので, 出鱈目な情報ではなく正しい情報の記載をお願いいたします.
-
-## 精度評価
-
-[評価用のプログラム](#評価用のプログラム)により検証用データや自作のデータなどを用いて精度評価を行うことができる. 詳細は評価用プログラムに同封してある`readme.md`を参照されたい.
-
-## 投稿時の注意点
-
-- 投稿する前に[応募用ファイルのフォーマット](#応募用ファイルについて)をよく確認すること.
-- 投稿後, 評価に成功すると各問に対する評価結果を取得することができる(「投稿済みファイル」タブの評価内容からダウンロードできる. また, メールでもダウンロードURLが送付され, そこからでもダウンロードできる). アルゴリズムの改善の参考にされたい.
+## License
+This project is licensed under the MIT License. See `LICENSE` for details.
