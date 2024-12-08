@@ -1,5 +1,6 @@
 output/
 tests/
+evaluation/
 logs/
 data/processed/
 data/validation/
