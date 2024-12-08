@@ -1,72 +1,78 @@
 # RAG Application with Streamlit
 
 ## Overview
-This is a **Retrieval-Augmented Generation (RAG)** system built with Streamlit, leveraging **OpenAI's GPT model**, FAISS for vector-based document search, and Neo4j for graph-based metadata exploration. The application enables efficient question-answering and document metadata extraction.
+This is a **Retrieval-Augmented Generation (RAG)** system built with Streamlit. It leverages **OpenAI GPT models**, FAISS for vector-based document search, and Neo4j for graph-based metadata exploration. The application enables efficient question-answering and document metadata extraction for uploaded text files.
 
 ## Features
-- **Question Answering**: Combines semantic search with a retrieval-augmented generation pipeline.
-- **Document Metadata Extraction**: Extracts key information such as title, author, themes, and synopsis from documents.
-- **Graph Integration**: Integrates Neo4j for advanced metadata querying.
-- **Customizable Chunking**: Processes documents in pre-defined or dynamically sized chunks.
+- **Question Answering**: Combines semantic search with retrieval-augmented generation.
+- **Document Metadata Extraction**: Extracts and summarizes key information like title, author, and themes.
+- **Graph Integration**: Queries metadata using Neo4j for enhanced insights.
+- **Customizable Chunking**: Supports dynamic or pre-defined text chunking for efficient processing.
 
 ## Demo
-![App Screenshot](App_Screenshot.png)
+![Application Screenshot](App_Screenshot.png)
 
 ## Installation
 
-1. Clone the repository:
-   ```bash
-   git clone https://github.com/yourusername/rag-app.git
-   cd rag-app
-   ```
+### 1. Clone the Repository
+```bash
+git clone https://github.com/yourusername/rag-app.git
+cd rag-app
+```
 
-2. Install the required dependencies:
-   ```bash
-   pip install -r requirements.txt
-   ```
+### 2. Set Up a Virtual Environment
+```bash
+python -m venv .venv
+source .venv/bin/activate  # On Windows, use .venv\Scripts\activate
+```
 
-3. Set up environment variables:
-   - Add your OpenAI API key:
-     ```bash
-     export OPENAI_API_KEY="your-api-key-here"
-     ```
+### 3. Install Dependencies
+```bash
+pip install -r requirements.txt
+```
 
-4. Run the Streamlit app:
-   ```bash
-   streamlit run app.py
-   ```
+### 4. Set Up Environment Variables
+Add your OpenAI API key to the environment:
+```bash
+export OPENAI_API_KEY="your-api-key-here"
+```
+
+### 5. Run the Streamlit Application
+```bash
+streamlit run src/app.py
+```
+
+## Directory Structure
+```
+project-root/
+├── .venv/                # Virtual environment (not included in version control)
+├── data/                 # Data directory
+│   ├── raw/              # Raw input files (e.g., query.csv, novels)
+├── src/                  # Source code
+│   └── app.py            # Main application file
+├── .gitignore            # Files and directories to be excluded from version control
+├── App_Screenshot.png    # Application screenshot
+├── README.md             # Project documentation
+└── requirements.txt      # Python dependencies
+```
 
 ## Usage
-1. **Upload a Document**:
-   - Use the file uploader in the sidebar to upload `.txt` files for processing.
-
-2. **Process the Document**:
-   - Select chunking options and click "Process Document" to split and vectorize the document.
-
-3. **Ask Questions**:
-   - Input a question in the RAG or Simple Chat mode and receive answers based on the processed documents.
-
-4. **Download Results**:
-   - Metadata, chunks, and vectorized data can be downloaded for further use.
+1. **Prepare Your Data**: Place `.txt` or `.csv` files in the `data/raw/` directory or upload them via the application.
+2. **Run the Application**:
+   - Start the application with the Streamlit command provided above.
+   - Use the sidebar to upload documents, configure chunking options, and process files.
+3. **Interact**:
+   - Ask questions in RAG or Simple Chat modes.
+   - Extract metadata or download processed results as needed.
 
 ## Technologies Used
-- **Streamlit**: User interface for document upload and interaction.
-- **OpenAI GPT**: Natural language understanding and generation.
-- **FAISS**: Fast vector similarity search.
-- **Neo4j**: Graph-based metadata storage and querying.
-
-## Project Structure
-```
-rag-app/
-├── app.py               # Main Streamlit application
-├── requirements.txt     # Python dependencies
-├── data/                # Sample data or processed files
-├── README.md            # Project description
-└── other-scripts/       # Supporting modules or utilities
-```
+- **Streamlit**: Provides an interactive user interface.
+- **OpenAI GPT**: Powers natural language understanding and generation.
+- **FAISS**: Ensures fast and efficient similarity search.
+- **Neo4j**: Enhances metadata querying with graph-based storage.
 
 ## Contributing
-Feel free to fork this repository and contribute by submitting pull requests.
+Contributions are welcome! Fork this repository, make improvements, and submit pull requests.
 
 ## License
-This project is licensed under the MIT License. See `LICENSE` for details.
+This project is licensed under the MIT License. See the `LICENSE` file for details.

@@ -1,8 +1,10 @@
+configs/
 output/
 tests/
 evaluation/
 logs/
 data/processed/
+data/sample_submit/
 data/validation/
 *.log
 __pycache__/
