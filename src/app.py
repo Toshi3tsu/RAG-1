@@ -352,9 +352,9 @@ def merge_faiss_stores(store1, store2):
     return new_store
 
 # Neo4jGraphの初期化（接続情報は環境に合わせて変更）
-neo4j_url = "neo4j+s://bb2d8548.databases.neo4j.io:7687"
-neo4j_user = "neo4j"
-neo4j_password = "EgSwGZ8qdRHtWQhWqEyXmhr9VU8L4a769M9dZo1pnLs"
+neo4j_url = "NEO4J_URL"
+neo4j_user = "NEO4J_USER"
+neo4j_password = "NEO4J_PASSWORD"
 try:
     # Neo4jGraphインスタンスを作成
     graph = Neo4jGraph(neo4j_url, neo4j_user, neo4j_password)
