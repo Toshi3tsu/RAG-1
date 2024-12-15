@@ -8,3 +8,4 @@ data/sample_submit/
 data/validation/
 *.log
 __pycache__/
+*Dockerfile
