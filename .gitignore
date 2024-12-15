@@ -9,3 +9,4 @@ data/validation/
 *.log
 __pycache__/
 *Dockerfile
+*task-definition.json
