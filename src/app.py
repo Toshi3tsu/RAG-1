@@ -436,24 +436,42 @@ if 'metadata_extracted_files' not in st.session_state:
     st.session_state.metadata_extracted_files = []
 
 # サイドバー
+import streamlit as st
+import os
+
+# サイドバー
 with st.sidebar:
     st.header("Settings")
 
-    # デフォルトAPIキー
-    default_api_key = st.secrets["api_key"] # ここにデフォルトのAPIキーをセット
+    # デフォルトAPIキーをシークレットから取得
+    default_api_key = st.secrets.get("api_key", "")  # シークレットが設定されていない場合、空文字を返す
 
-    # OpenAI APIキーの入力（セッション状態に保存）
+    # セッション状態にAPIキーがない場合、デフォルトを設定
     if 'api_key' not in st.session_state:
         st.session_state.api_key = default_api_key
 
-    # APIキー入力欄のデフォルト値にセッションキーをセット
-    api_key = st.text_input("Enter your OpenAI API key", type="password", value=st.session_state.api_key)
-    os.environ["OPENAI_API_KEY"] = api_key
+    # OpenAI APIキーの入力（セッション状態に保存）
+    api_key = st.text_input(
+        "Enter your OpenAI API key",
+        type="password",  # パスワードタイプで非表示
+        placeholder="Enter your API key here",  # プレースホルダーで案内メッセージ
+        value=st.session_state.api_key  # セッションステートから初期値を取得
+    )
 
-    # ユーザーが新しいAPIキーを入力した場合は更新
+    # ユーザーがAPIキーを入力した場合はセッションステートと環境変数を更新
     if api_key and api_key != st.session_state.api_key:
         st.session_state.api_key = api_key
-        os.environ["OPENAI_API_KEY"] = api_key
+
+    # 現在のセッション状態のAPIキーを環境変数に設定
+    os.environ["OPENAI_API_KEY"] = st.session_state.api_key
+
+    # メッセージを表示
+    if st.session_state.api_key == default_api_key:
+        st.write("Using default API key from secrets.")
+    elif st.session_state.api_key:
+        st.write("Using your custom API key.")
+    else:
+        st.error("No API key available. Please enter one.")
 
     st.markdown("---")
 
