@@ -1,7 +1,7 @@
 # RAG Application with Streamlit
 
 ## Link
-https://3fbiunvapkkmmkddrpwdxg.streamlit.app/
+https://rag-test-aplication.streamlit.app/
 
 ## Overview
 This is a **Retrieval-Augmented Generation (RAG)** system built with Streamlit. It leverages **OpenAI GPT models**, FAISS for vector-based document search, and Neo4j for graph-based metadata exploration. The application enables efficient question-answering and document metadata extraction for uploaded text files.
