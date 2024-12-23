@@ -352,12 +352,12 @@ def merge_faiss_stores(store1, store2):
     return new_store
 
 # Neo4jGraphの初期化（接続情報は環境に合わせて変更）
-neo4j_url = st.secrets["NEO4J_URI"]
-neo4j_user = st.secrets["NEO4J_USERNAME"]
-neo4j_password = st.secrets["NEO4J_PASSWORD"]
+neo4j_uri = st.secrets["neo4j_uri"]
+neo4j_username = st.secrets["neo4j_username"]
+neo4j_password = st.secrets["neo4j_password"]
 try:
     # Neo4jGraphインスタンスを作成
-    graph = Neo4jGraph(neo4j_url, neo4j_user, neo4j_password)
+    graph = Neo4jGraph(neo4j_uri, neo4j_username, neo4j_password)
     st.write("Neo4jに接続成功しました")
     
     # クエリの例（基本的なクエリをテストする）
