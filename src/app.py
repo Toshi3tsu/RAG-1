@@ -352,9 +352,9 @@ def merge_faiss_stores(store1, store2):
     return new_store
 
 # Neo4jGraphの初期化（接続情報は環境に合わせて変更）
-neo4j_url = "NEO4J_URL"
-neo4j_user = "NEO4J_USER"
-neo4j_password = "NEO4J_PASSWORD"
+neo4j_url = st.secrets["NEO4J_URL"]
+neo4j_user = st.secrets["NEO4J_USER"]
+neo4j_password = st.secrets["NEO4J_PASSWORD"]
 try:
     # Neo4jGraphインスタンスを作成
     graph = Neo4jGraph(neo4j_url, neo4j_user, neo4j_password)
@@ -440,7 +440,7 @@ with st.sidebar:
     st.header("Settings")
 
     # デフォルトAPIキー
-    default_api_key = ""  # ここにデフォルトのAPIキーをセット
+    default_api_key = st.secrets["api_key"] # ここにデフォルトのAPIキーをセット
 
     # OpenAI APIキーの入力（セッション状態に保存）
     if 'api_key' not in st.session_state:
