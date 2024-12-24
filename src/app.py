@@ -1277,7 +1277,7 @@ elif st.session_state.mode == 'Simple Chat':
     # チャット履歴の表示
     for i, (user_input, response) in enumerate(st.session_state.chat_history):
         st.markdown(f"**User {i+1}:** {user_input}")
-        st.markdown(f"**ChatGPT {i+1}:** {response}")
+        st.markdown(f"**Assistant {i+1}:** {response}")
 
     # 入力フィールドとボタン
     st.session_state.current_input = st.text_input("Enter your question:", value=st.session_state.current_input, on_change=None)
@@ -1286,10 +1286,15 @@ elif st.session_state.mode == 'Simple Chat':
         with st.spinner("Generating answer..."):
             try:
                 llm = ChatOpenAI(temperature=0, model="gpt-4o-mini")
+                # 履歴を一つの文字列にまとめる
                 context = "\n".join(
-                    [f"User {i+1}: {user_input}\nChatGPT {i+1}: {response}" for i, (user_input, response) in enumerate(st.session_state.chat_history)]
+                    [f"User {i+1}: {user_input}\nAssistant {i+1}: {response}"
+                    for i, (user_input, response) in enumerate(st.session_state.chat_history)]
                 )
-                response = llm.invoke(st.session_state.current_input, context=context)
+                # 質問に履歴を付加
+                full_prompt = f"{context}\nUser {len(st.session_state.chat_history)+1}: {st.session_state.current_input}\nAssistant {len(st.session_state.chat_history)+1}:"
+                response = llm.invoke(full_prompt)
+                # 履歴に追加
                 st.session_state.chat_history.append((st.session_state.current_input, response.content))
                 st.session_state.current_input = ''  # 入力フィールドをクリア
                 manage_chat_history()  # 履歴を管理
