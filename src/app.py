@@ -1263,7 +1263,7 @@ else:  # Simple Chat mode
     if st.button("Ask (Simple)"):
         with st.spinner("Generating answer..."):
             try:
-                llm = OpenAI(temperature=0, model="gpt-4o")
+                llm = ChatOpenAI(temperature=0, model="gpt-4o")
                 response = llm(query)
                 st.subheader("Answer:")
                 st.write(response)
