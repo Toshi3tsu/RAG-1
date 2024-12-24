@@ -410,6 +410,15 @@ def multiply_fun(x, y):
     except Exception as e:
         return f"Error in multiplication: {str(e)}"
 
+# チャット履歴の管理関数
+def manage_chat_history():
+    # 履歴を文字数で計算
+    total_length = sum(len(user_input) + len(response) for user_input, response in st.session_state.chat_history)
+    # 3000文字を超えた場合、先頭から削除
+    while total_length > 3000 and st.session_state.chat_history:
+        removed = st.session_state.chat_history.pop(0)
+        total_length = sum(len(user_input) + len(response) for user_input, response in st.session_state.chat_history)
+
 # Streamlitアプリの設定
 st.title("RAG System Demo")
 
@@ -1262,22 +1271,30 @@ if st.session_state.mode == 'RAG':
     else:
         st.info("Please upload and process a document first to use RAG mode.")
 
-elif st.session_state.mode == 'Simple Chat':  # Simple Chat mode
+elif st.session_state.mode == 'Simple Chat':
     st.header("Simple Chat")
-    st.session_state.query = st.text_input("Enter your question:", value=st.session_state.query)
 
-    if st.button("Ask (Simple)"):
+    # チャット履歴の表示
+    for i, (user_input, response) in enumerate(st.session_state.chat_history):
+        st.markdown(f"**User {i+1}:** {user_input}")
+        st.markdown(f"**ChatGPT {i+1}:** {response}")
+
+    # 入力フィールドとボタン
+    st.session_state.current_input = st.text_input("Enter your question:", value=st.session_state.current_input, on_change=None)
+
+    if st.button("Send"):
         with st.spinner("Generating answer..."):
             try:
                 llm = ChatOpenAI(temperature=0, model="gpt-4o-mini")
-                response = llm.invoke(st.session_state.query)
-                st.session_state.response = response.content
+                context = "\n".join(
+                    [f"User {i+1}: {user_input}\nChatGPT {i+1}: {response}" for i, (user_input, response) in enumerate(st.session_state.chat_history)]
+                )
+                response = llm.invoke(st.session_state.current_input, context=context)
+                st.session_state.chat_history.append((st.session_state.current_input, response.content))
+                st.session_state.current_input = ''  # 入力フィールドをクリア
+                manage_chat_history()  # 履歴を管理
             except Exception as e:
                 st.error(f"An error occurred while generating the answer: {str(e)}")
-
-    if st.session_state.response:
-        st.subheader("Answer:")
-        st.write(st.session_state.response)
 
 # 一時ファイルの削除
 if 'tmp_file_path' in locals():
