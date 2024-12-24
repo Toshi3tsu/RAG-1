@@ -1263,8 +1263,8 @@ else:  # Simple Chat mode
     if st.button("Ask (Simple)"):
         with st.spinner("Generating answer..."):
             try:
-                llm = ChatOpenAI(temperature=0, model="gpt-4o")
-                response = llm(query)
+                llm = ChatOpenAI(temperature=0, model="gpt-4o-mini")
+                response = llm.invoke(query)
                 st.subheader("Answer:")
                 st.write(response)
             except Exception as e:
