@@ -416,6 +416,10 @@ st.title("RAG System Demo")
 # セッション状態の初期化
 if 'mode' not in st.session_state:
     st.session_state.mode = 'RAG'
+if 'query' not in st.session_state:
+    st.session_state.query = ''
+if 'response' not in st.session_state:
+    st.session_state.response = None
 if 'data_loaded' not in st.session_state:
     st.session_state.data_loaded = False
 if 'vectorstore' not in st.session_state:
@@ -726,549 +730,554 @@ with st.sidebar:
 mode = st.radio("Select mode:", ('RAG', 'Simple Chat'))
 st.session_state.mode = mode
 
-if st.session_state.mode == 'RAG' and (st.session_state.document_processed or st.session_state.data_loaded):
-    # 2列レイアウトの作成
-    col1, col2 = st.columns(2)
+if st.session_state.mode == 'RAG':
+    if st.session_state.document_processed or st.session_state.data_loaded:
+        # 2列レイアウトの作成
+        col1, col2 = st.columns(2)
 
-    # 左側のカラム（チャット画面）
-    with col1:
-        st.header("RAG Chat")
-        # クエリ入力
-        query = st.text_input("Enter your question:")
-        if st.button("Ask (RAG)"):
-            with st.spinner("Generating answer..."):
-                try:
-                    functions = [
-                        {
-                            "name": "extract_keywords",
-                            "description": "キーワード検索を行うための単語をリスト化します。",
-                            "parameters": {
-                                "type": "object",
-                                "properties": {
-                                    "keywords": {"type": "array", "items": {"type": "string"}, "description": "抽出された単語のリスト"}
-                                },
-                                "required": ["keywords"]
+        # 左側のカラム（チャット画面）
+        with col1:
+            st.header("RAG Chat")
+            # クエリ入力
+            query = st.text_input("Enter your question:")
+            if st.button("Ask (RAG)"):
+                with st.spinner("Generating answer..."):
+                    try:
+                        functions = [
+                            {
+                                "name": "extract_keywords",
+                                "description": "キーワード検索を行うための単語をリスト化します。",
+                                "parameters": {
+                                    "type": "object",
+                                    "properties": {
+                                        "keywords": {"type": "array", "items": {"type": "string"}, "description": "抽出された単語のリスト"}
+                                    },
+                                    "required": ["keywords"]
+                                }
                             }
-                        }
-                    ]
+                        ]
 
-                    # ファイル名の判定
-                    specified_files = []
-                    current_files = st.session_state.current_files  # 現在のファイルリスト
-                    # st.write(f"Current Files: {', '.join(current_files)}")
+                        # ファイル名の判定
+                        specified_files = []
+                        current_files = st.session_state.current_files  # 現在のファイルリスト
+                        # st.write(f"Current Files: {', '.join(current_files)}")
 
-                    # ファイル名から拡張子を除いた名前を使用してクエリに含まれているかを確認
-                    for file_name in current_files:
-                        file_name_without_extension = file_name.replace(".txt", "")  # 拡張子を除去
-                        # ファイル名（拡張子なし）がクエリに含まれているか確認
-                        if file_name_without_extension in query:
-                            specified_files.append(file_name)
+                        # ファイル名から拡張子を除いた名前を使用してクエリに含まれているかを確認
+                        for file_name in current_files:
+                            file_name_without_extension = file_name.replace(".txt", "")  # 拡張子を除去
+                            # ファイル名（拡張子なし）がクエリに含まれているか確認
+                            if file_name_without_extension in query:
+                                specified_files.append(file_name)
 
-                    # クエリから固有名詞・特徴的な単語を抽出
-                    extraction_prompt = (
-                        f"#質問\n{query}"
-                    )
-                    llm = ChatOpenAI(
+                        # クエリから固有名詞・特徴的な単語を抽出
+                        extraction_prompt = (
+                            f"#質問\n{query}"
+                        )
+                        llm = ChatOpenAI(
+                                temperature=0,
+                                model="gpt-4o",
+                                functions=functions,
+                                function_call={"name": "extract_keywords"}
+                            )
+                        extraction_response = llm([
+                            {"role": "system", "content": """小説を見分けることが目的です。次の質問から固有名詞または特徴的な単語を、複合語に注意して抽出してください。
+                            表現のゆれ（活用）で完全一致が難しいキーワードは分割します。「...」など記号も除きます。小説特徴付ける単語以外は除きます。
+                            例えば、「研究グループ」は意味の独立した単語の複合語なので「研究」と「グループ」に分けますが、「鶴の一声」のような慣用句については分けると意味が損なわれるので「鶴の一声」のままとします。
+                            また、「メンバー」「科」などの一般的な名詞が含まれている場合は、他の名詞と分割します。"""},
+                            {"role": "user", "content": extraction_prompt}
+                        ])
+
+                        # GPTによる抽出結果を処理
+                        extracted_keywords = []
+                        if extraction_response.additional_kwargs.get("function_call"):
+                            function_call = extraction_response.additional_kwargs["function_call"]
+                            arguments = json.loads(function_call["arguments"])
+                            extracted_keywords = arguments.get("keywords", [])
+
+                        # st.write(f"抽出されたキーワード: {extracted_keywords}")
+                        filtered_keywords = [kw for kw in extracted_keywords if kw not in [file_name_without_extension for file_name in current_files]]
+
+                        functions = [
+                            {
+                                "name": "get_short_answer_with_quote",
+                                "description": "クエリに対する短い回答を作成し、ドキュメントから引用文を提供します。",
+                                "parameters": {
+                                    "type": "object",
+                                    "properties": {
+                                        "answer": {"type": "string", "description": "クエリに対する簡潔な回答。"},
+                                        "quote": {"type": "string", "description": "ドキュメントからの引用文。"}
+                                    },
+                                    "required": ["answer", "quote"]
+                                }
+                            },
+                            {
+                                "name": "multiply",
+                                "description": "計算問題に解答します。質問から計算方法を判別し、ドキュメントから変数と引用文を提供します。",
+                                "parameters": {
+                                    "type": "object",
+                                    "properties": {
+                                        "x": {"type": "string", "description": "最初の変数 (x)."},
+                                        "y": {"type": "string", "description": "2つ目の変数 (y)."},
+                                        "quote": {"type": "string", "description": "ドキュメントからの引用文。"}
+                                    },
+                                    "required": ["x", "y", "quote"]
+                                }
+                            }
+                        ]
+                        
+                        # ChatOpenAIインスタンスの作成（Function Callingを有効にする）
+                        llm = ChatOpenAI(
                             temperature=0,
                             model="gpt-4o",
                             functions=functions,
-                            function_call={"name": "extract_keywords"}
+                            function_call="auto"
                         )
-                    extraction_response = llm([
-                        {"role": "system", "content": """小説を見分けることが目的です。次の質問から固有名詞または特徴的な単語を、複合語に注意して抽出してください。
-                         表現のゆれ（活用）で完全一致が難しいキーワードは分割します。「...」など記号も除きます。小説特徴付ける単語以外は除きます。
-                         例えば、「研究グループ」は意味の独立した単語の複合語なので「研究」と「グループ」に分けますが、「鶴の一声」のような慣用句については分けると意味が損なわれるので「鶴の一声」のままとします。
-                         また、「メンバー」「科」などの一般的な名詞が含まれている場合は、他の名詞と分割します。"""},
-                        {"role": "user", "content": extraction_prompt}
-                    ])
 
-                    # GPTによる抽出結果を処理
-                    extracted_keywords = []
-                    if extraction_response.additional_kwargs.get("function_call"):
-                        function_call = extraction_response.additional_kwargs["function_call"]
-                        arguments = json.loads(function_call["arguments"])
-                        extracted_keywords = arguments.get("keywords", [])
+                        # 指定ファイルがある場合
+                        if specified_files:
+                            st.write(f"クエリに含まれていた指定ファイル: {', '.join(specified_files)}")
+                            selected_file = specified_files[0]  # 最初の一致したファイルを使用
+                            st.write(f"選択されたファイル: {selected_file}")
 
-                    # st.write(f"抽出されたキーワード: {extracted_keywords}")
-                    filtered_keywords = [kw for kw in extracted_keywords if kw not in [file_name_without_extension for file_name in current_files]]
+                            # 選択されたファイルのチャンクを取得
+                            matched_chunks = st.session_state.split_docs.get(selected_file, [])
 
-                    functions = [
-                        {
-                            "name": "get_short_answer_with_quote",
-                            "description": "クエリに対する短い回答を作成し、ドキュメントから引用文を提供します。",
-                            "parameters": {
-                                "type": "object",
-                                "properties": {
-                                    "answer": {"type": "string", "description": "クエリに対する簡潔な回答。"},
-                                    "quote": {"type": "string", "description": "ドキュメントからの引用文。"}
-                                },
-                                "required": ["answer", "quote"]
-                            }
-                        },
-                        {
-                            "name": "multiply",
-                            "description": "計算問題に解答します。質問から計算方法を判別し、ドキュメントから変数と引用文を提供します。",
-                            "parameters": {
-                                "type": "object",
-                                "properties": {
-                                    "x": {"type": "string", "description": "最初の変数 (x)."},
-                                    "y": {"type": "string", "description": "2つ目の変数 (y)."},
-                                    "quote": {"type": "string", "description": "ドキュメントからの引用文。"}
-                                },
-                                "required": ["x", "y", "quote"]
-                            }
-                        }
-                    ]
-                    
-                    # ChatOpenAIインスタンスの作成（Function Callingを有効にする）
-                    llm = ChatOpenAI(
-                        temperature=0,
-                        model="gpt-4o",
-                        functions=functions,
-                        function_call="auto"
-                    )
+                            # キーワードヒットのカウント
+                            keyword_hits = {keyword: 0 for keyword in extracted_keywords}
 
-                    # 指定ファイルがある場合
-                    if specified_files:
-                        st.write(f"クエリに含まれていた指定ファイル: {', '.join(specified_files)}")
-                        selected_file = specified_files[0]  # 最初の一致したファイルを使用
-                        st.write(f"選択されたファイル: {selected_file}")
-
-                        # 選択されたファイルのチャンクを取得
-                        matched_chunks = st.session_state.split_docs.get(selected_file, [])
-
-                        # キーワードヒットのカウント
-                        keyword_hits = {keyword: 0 for keyword in extracted_keywords}
-
-                        for doc in matched_chunks:
-                            doc_content_normalized = normalize_text(doc.page_content)
-                            for keyword in extracted_keywords:
-                                keyword_normalized = normalize_text(keyword)
-                                keyword_count = doc_content_normalized.count(keyword_normalized)
-                                if keyword_count > 0:
-                                    keyword_hits[keyword] += keyword_count
-
-                        st.write(f"キーワードのヒット回数: {keyword_hits}")
-                        keyword_idf = {}
-
-                    else:
-                        st.write("ファイル名がクエリに含まれていません。")
-
-                        # 抽出したキーワードがある場合、キーワード検索を行う
-                        if filtered_keywords:
-                            # キーワードが含まれるファイルを完全一致で検索し、ヒット回数をカウント
-                            keyword_hits = {}  # 各ファイルごとのキーワードヒット数を記録
-                            matched_chunks = {}  # 各ファイルごとのヒットしたチャンクを記録
-
-                            # キーワードが含まれるファイルを完全一致で検索
-                            keyword_query = " ".join(extracted_keywords)
-                            st.write(f"検索キーワード: {keyword_query}")
-
-                            total_documents = len(st.session_state.split_docs)  # 総ドキュメント数
-
-                            # ドキュメント頻度（DF）の計算
-                            keyword_document_frequency = {keyword: 0 for keyword in extracted_keywords}
-
-                            for file, docs in st.session_state.split_docs.items():
-                                file_keyword_hits = {keyword: 0 for keyword in extracted_keywords}
-                                matched_docs = []
-                                for doc in docs:
-                                    # ドキュメントテキストを正規化
-                                    doc_content_normalized = normalize_text(doc.page_content)
-                                    keyword_found_in_doc = False
-                                    for keyword in extracted_keywords:
-                                        # キーワードを正規化
-                                        keyword_normalized = normalize_text(keyword)
-                                        # キーワードの出現回数をカウント
-                                        keyword_count = doc_content_normalized.count(keyword_normalized)
-                                        if keyword_count > 0:
-                                            file_keyword_hits[keyword] += keyword_count
-                                            keyword_found_in_doc = True
-                                    if keyword_found_in_doc:
-                                        matched_docs.append(doc)
-                                # ファイル内でキーワードが見つかった場合
-                                if any(count > 0 for count in file_keyword_hits.values()):
-                                    keyword_hits[file] = file_keyword_hits
-                                    matched_chunks[file] = matched_docs
-                                    for keyword in extracted_keywords:
-                                        if file_keyword_hits[keyword] > 0:
-                                            keyword_document_frequency[keyword] += 1
-
-                            # IDFの計算
-                            keyword_idf = {}
-                            for keyword in extracted_keywords:
-                                df = keyword_document_frequency[keyword]
-                                if df > 0:
-                                    keyword_idf[keyword] = math.log(total_documents / df)
-                                else:
-                                    keyword_idf[keyword] = 0.0
-
-                            # 各ファイルのTF-IDFスコアを計算
-                            file_scores = {}
-                            for file, hits in keyword_hits.items():
-                                tf_idf_score = 0.0
-                                found_keywords_count = 0  # 登場したキーワード数のカウント
+                            for doc in matched_chunks:
+                                doc_content_normalized = normalize_text(doc.page_content)
                                 for keyword in extracted_keywords:
-                                    tf = 1 + math.log(hits[keyword]) if hits[keyword] > 0 else 0
-                                    idf_weight = 1.5  # IDFの影響を強める場合
-                                    idf = idf_weight * math.log(total_documents / (1 + df))
-                                    tf_idf_score += tf * idf
-                                    if hits[keyword] > 0:
-                                        found_keywords_count += 1  # キーワードが登場したらカウントアップ
+                                    keyword_normalized = normalize_text(keyword)
+                                    keyword_count = doc_content_normalized.count(keyword_normalized)
+                                    if keyword_count > 0:
+                                        keyword_hits[keyword] += keyword_count
 
-                                # キーワードが登場する数に応じてボーナスを与える
-                                coverage_bonus = found_keywords_count / len(extracted_keywords)
-                                tf_idf_score += coverage_bonus * idf_rate  # ボーナスの強さは調整可能
-
-                                file_scores[file] = tf_idf_score
-
-                            # スコアの高い順にファイルをソート
-                            sorted_files = sorted(file_scores.items(), key=lambda x: x[1], reverse=True)
-
-                            # 最もスコアの高いファイルを選択
-                            if sorted_files:
-                                selected_file = sorted_files[0][0]
-                                st.write(f"TF-IDFスコアに基づいて選択されたファイル: {selected_file}")
-                                st.write(f"ファイルごとのTF-IDFスコア: {file_scores}")
-
-                                # 選択されたファイルのヒットしたチャンクを取得
-                                matched_chunks = matched_chunks[selected_file]
-                                keyword_hits = keyword_hits[selected_file]
-                            else:
-                                st.error("キーワードに一致するファイルが見つかりませんでした。")
-                                continue_processing = False
-                        else:
-                            st.error("キーワードが抽出できなかったため、検索を実行できませんでした。")
+                            st.write(f"キーワードのヒット回数: {keyword_hits}")
                             keyword_idf = {}
-                            continue_processing = False
 
-                    # メタデータベースの回答生成
-                    if 'selected_file' in locals():
-                        neo4j_data = fetch_neo4j_data(selected_file, extracted_keywords)
-                        st.write("Neo4jから取得したデータ:", neo4j_data)
-                        
-                        messages = [
-                                {"role": "system", "content": """
-                                質問を入念に読み解きます。グラフDBの情報から、質問に関連する情報を抜き出して整理します。
-                                なぜ、関連していると言えるのかも記載します。"""},
-                                {"role": "user", "content": f"質問: {query}\n\n#グラフDB:{neo4j_data}"}
-                            ]
+                        else:
+                            st.write("ファイル名がクエリに含まれていません。")
 
-                        llm = ChatOpenAI(
-                            temperature=0,
-                            model="gpt-4o"
-                        )
-                        neo4j_data = llm(messages)
-                        neo4j_data = neo4j_data.content
-                        st.write(neo4j_data)
+                            # 抽出したキーワードがある場合、キーワード検索を行う
+                            if filtered_keywords:
+                                # キーワードが含まれるファイルを完全一致で検索し、ヒット回数をカウント
+                                keyword_hits = {}  # 各ファイルごとのキーワードヒット数を記録
+                                matched_chunks = {}  # 各ファイルごとのヒットしたチャンクを記録
 
-                        metadata_response_json = metadata_based_gpt_response(query, st.session_state.metadata_df, selected_file, llm)
+                                # キーワードが含まれるファイルを完全一致で検索
+                                keyword_query = " ".join(extracted_keywords)
+                                st.write(f"検索キーワード: {keyword_query}")
 
-                        st.subheader("Metadata-based Answer:")
-                        st.write(metadata_response_json["Metadata_based_Answer"])
+                                total_documents = len(st.session_state.split_docs)  # 総ドキュメント数
 
-                        # メタデータからの回答が不十分な場合、RAGでの回答処理を行う
-                        if metadata_response_json["Sufficiency"] == "不十分":
-                            st.write("メタデータからの回答が不十分でした。RAGを実行して詳細な情報を検索します。")
+                                # ドキュメント頻度（DF）の計算
+                                keyword_document_frequency = {keyword: 0 for keyword in extracted_keywords}
 
-                            # キーワードが抽出できた場合、キーワード検索と類似度検索を行う
-                            if filtered_keywords and any(keyword_hits.values()):
-                                # キーワード検索でヒットしたチャンクを検索対象にして、類似度検索を実行
-                                st.write("キーワード検索でヒットしたチャンクを検索対象にして、類似度検索を実行します。")
+                                for file, docs in st.session_state.split_docs.items():
+                                    file_keyword_hits = {keyword: 0 for keyword in extracted_keywords}
+                                    matched_docs = []
+                                    for doc in docs:
+                                        # ドキュメントテキストを正規化
+                                        doc_content_normalized = normalize_text(doc.page_content)
+                                        keyword_found_in_doc = False
+                                        for keyword in extracted_keywords:
+                                            # キーワードを正規化
+                                            keyword_normalized = normalize_text(keyword)
+                                            # キーワードの出現回数をカウント
+                                            keyword_count = doc_content_normalized.count(keyword_normalized)
+                                            if keyword_count > 0:
+                                                file_keyword_hits[keyword] += keyword_count
+                                                keyword_found_in_doc = True
+                                        if keyword_found_in_doc:
+                                            matched_docs.append(doc)
+                                    # ファイル内でキーワードが見つかった場合
+                                    if any(count > 0 for count in file_keyword_hits.values()):
+                                        keyword_hits[file] = file_keyword_hits
+                                        matched_chunks[file] = matched_docs
+                                        for keyword in extracted_keywords:
+                                            if file_keyword_hits[keyword] > 0:
+                                                keyword_document_frequency[keyword] += 1
 
-                                # クエリのベクトルを取得
-                                embeddings = OpenAIEmbeddings(model="text-embedding-3-small")
-                                query_vector = embeddings.embed_query(query)
+                                # IDFの計算
+                                keyword_idf = {}
+                                for keyword in extracted_keywords:
+                                    df = keyword_document_frequency[keyword]
+                                    if df > 0:
+                                        keyword_idf[keyword] = math.log(total_documents / df)
+                                    else:
+                                        keyword_idf[keyword] = 0.0
 
-                                # ヒットしたチャンクのベクトルとキーワードTF-IDFスコアを計算
-                                chunk_vectors = []
-                                keyword_tf_idf_scores = []
-                                for doc in matched_chunks:
-                                    # チャンクのベクトルを計算
-                                    chunk_vector = embeddings.embed_query(doc.page_content)
-                                    chunk_vectors.append(chunk_vector)
-
-                                    # チャンク内のキーワード出現頻度（TF）を計算
-                                    doc_content = normalize_text(doc.page_content)
-                                    tf_scores = {}
+                                # 各ファイルのTF-IDFスコアを計算
+                                file_scores = {}
+                                for file, hits in keyword_hits.items():
+                                    tf_idf_score = 0.0
+                                    found_keywords_count = 0  # 登場したキーワード数のカウント
                                     for keyword in extracted_keywords:
-                                        keyword_normalized = normalize_text(keyword)
-                                        count = doc_content.count(keyword_normalized)
-                                        if count > 0:
-                                            tf_scores[keyword] = 1 + math.log(count)
-                                        else:
-                                            tf_scores[keyword] = 0.0
+                                        tf = 1 + math.log(hits[keyword]) if hits[keyword] > 0 else 0
+                                        idf_weight = 1.5  # IDFの影響を強める場合
+                                        idf = idf_weight * math.log(total_documents / (1 + df))
+                                        tf_idf_score += tf * idf
+                                        if hits[keyword] > 0:
+                                            found_keywords_count += 1  # キーワードが登場したらカウントアップ
 
-                                    # IDFを計算（既に計算済みのkeyword_idfを使用）
-                                    tf_idf = 0.0
-                                    for keyword, tf in tf_scores.items():
-                                        idf = keyword_idf.get(keyword, 0.0)
-                                        tf_idf += tf * idf
+                                    # キーワードが登場する数に応じてボーナスを与える
+                                    coverage_bonus = found_keywords_count / len(extracted_keywords)
+                                    tf_idf_score += coverage_bonus * idf_rate  # ボーナスの強さは調整可能
 
-                                    keyword_tf_idf_scores.append(tf_idf)
+                                    file_scores[file] = tf_idf_score
 
-                                # ベクトル類似度スコアを計算
-                                vector_scores = [np.dot(query_vector, chunk_vector) for chunk_vector in chunk_vectors]
+                                # スコアの高い順にファイルをソート
+                                sorted_files = sorted(file_scores.items(), key=lambda x: x[1], reverse=True)
 
-                                # スコアの正規化
-                                epsilon = 1e-8  # ゼロ除算を防ぐための小さな値
-                                vector_scores = np.array(vector_scores)
-                                keyword_tf_idf_scores = np.array(keyword_tf_idf_scores)
+                                # 最もスコアの高いファイルを選択
+                                if sorted_files:
+                                    selected_file = sorted_files[0][0]
+                                    st.write(f"TF-IDFスコアに基づいて選択されたファイル: {selected_file}")
+                                    st.write(f"ファイルごとのTF-IDFスコア: {file_scores}")
 
-                                # ベクトルスコアの正規化（0から1の範囲）
-                                vector_scores_norm = (vector_scores - vector_scores.min()) / (vector_scores.max() - vector_scores.min() + epsilon)
-                                # キーワードTF-IDFスコアの正規化（0から1の範囲）
-                                keyword_scores_norm = (keyword_tf_idf_scores - keyword_tf_idf_scores.min()) / (keyword_tf_idf_scores.max() - keyword_tf_idf_scores.min() + epsilon)
-
-                                # ベクトルスコアとキーワードTF-IDFスコアを組み合わせて総合スコアを計算
-                                combined_scores = alpha * vector_scores_norm + beta * keyword_scores_norm
-
-                                # チャンクと総合スコアを組み合わせる
-                                chunk_scores = list(zip(matched_chunks, combined_scores))
-
-                                # 総合スコアに基づいてチャンクをソート
-                                sorted_chunks = sorted(chunk_scores, key=lambda x: x[1], reverse=True)  # 降順にソート
-
-                                # 上位のチャンクを取得
-                                docs = [doc for doc, score in sorted_chunks][:4]
-                                st.write(docs)
-
-                            # キーワードが抽出されなかった場合、ベクトル検索のみ実行
+                                    # 選択されたファイルのヒットしたチャンクを取得
+                                    matched_chunks = matched_chunks[selected_file]
+                                    keyword_hits = keyword_hits[selected_file]
+                                else:
+                                    st.error("キーワードに一致するファイルが見つかりませんでした。")
+                                    continue_processing = False
                             else:
-                                st.write("キーワードが抽出されなかったため、通常のベクトル検索結果を使用します。")
-                                retrieved_docs = st.session_state.vectorstore.similarity_search(query, k=10)
-                                docs = [doc for doc in retrieved_docs][:3]
+                                st.error("キーワードが抽出できなかったため、検索を実行できませんでした。")
+                                keyword_idf = {}
+                                continue_processing = False
 
-                            # 回答の生成（Function Calling）
-                            context = "\n".join([doc.page_content for doc in docs])
-
-                            # キーワードとその登場回数を含めた文字列
-                            keyword_hits_str = "\n".join([f"{keyword}: {count}" for keyword, count in keyword_hits.items()])
-
-                            # 10回以下のキーワードを抽出
-                            low_frequency_keywords = {keyword: count for keyword, count in keyword_hits.items() if count <= 20}
-
-                            # 10回以下のキーワードを別の文字列として出力
-                            low_frequency_keywords_str = "\n".join([f"{keyword}: {count}" for keyword, count in low_frequency_keywords.items()])
-
-                            # 必要に応じて、出力部分に追加
-                            st.write(f"10回以下のキーワード:\n{low_frequency_keywords_str}")
-
-                            # 辞書を使用してキーワードごとの文を格納
-                            low_freq_keyword_sentences = {}
-
-                            for keyword in low_frequency_keywords:
-                                sentences_set = set()  # 重複を排除するためにセットを使用
-                                keyword_normalized = normalize_text(keyword)
-                                # matched_chunksがリストの場合、ファイルごとに分ける処理が不要なので、単純なループに変更
-                                for doc in matched_chunks:
-                                    # 文単位で分割
-                                    sentences = doc.page_content.split('。')
-                                    for sentence in sentences:
-                                        sentence_normalized = normalize_text(sentence)
-                                        if keyword_normalized in sentence_normalized:
-                                            sentences_set.add(sentence.strip())  # 前後の空白を削除して追加
-                                low_freq_keyword_sentences[keyword] = list(sentences_set)  # セットをリストに変換
-
-                            # contextを文ごとに分割してリストに格納
-                            context_sentences = context.split('。')
-
-                            # 低頻度キーワードとその文の出力
-                            low_freq_keyword_sentences_str = ""
-
-                            for keyword, sentences in low_freq_keyword_sentences.items():
-                                # 各文がcontextに含まれていない場合のみ追加
-                                for sentence in sentences:
-                                    if sentence not in context_sentences:  # contextに含まれている文を除外
-                                        low_freq_keyword_sentences_str += f"- {sentence}。\n"
-                                
-                                low_freq_keyword_sentences_str += "\n"
-
-                            # 出力部分に追加
-                            st.write(f"10回以下のキーワードに含まれる文（contextに含まれないもの）:\n{low_freq_keyword_sentences_str}")
+                        # メタデータベースの回答生成
+                        if 'selected_file' in locals():
+                            neo4j_data = fetch_neo4j_data(selected_file, extracted_keywords)
+                            st.write("Neo4jから取得したデータ:", neo4j_data)
                             
-                            # keyword_hitsが定義されていて、かつ空でない場合のみ処理する
-                            if 'keyword_hits' in locals() and keyword_hits is not None and any(keyword_hits.values()):
-                                keyword_hits_str = "\n".join([f"{keyword}: {count}" for keyword, count in keyword_hits.items()])
-                                # メッセージにキーワードとその登場回数を含める
-                                messages = [
+                            messages = [
                                     {"role": "system", "content": """
-                                    ①「総額」や「いくら？」などの計算に関する質問の場合、自分で計算を行わなわず、必ずmultiply関数を呼び出してください。
-                                    ②その他の質問の場合、get_short_answer_with_quote関数を呼び出し、回答を作成し、その根拠を引用してください。必ず、引用は”本文”から文章を"そのまま"抜き出します。
-                                    - 回答は、質問に対して厳密（”～以上”などの細かい表現に注意する）かつ簡潔（50字以内）にします。
-                                    - 文書全体を調べた結果判明したグラフDBを参考にし、その内容を本文と合わせて理解します。
-                                    - 論理的に明らかに質問の前提に誤りがあると判断される場合は「質問誤り」と答えます。"""},
-                                    {"role": "user", "content": f"質問: {query}\n\n#本文:\n{context}\n\n{low_freq_keyword_sentences_str}\n\n#グラフDB（参考）:\n{neo4j_data}"}
-                                ]
-                            else:  # keyword_hitsが存在しないか、空の場合
-                                # メッセージにキーワードとその登場回数を含めない
-                                messages = [
-                                    {"role": "system", "content": """
-                                     質問に対して厳密（”～以上”などの細かい表現に注意する）かつ簡潔な回答（50字以内）を作成し、その根拠を引用してください。
-                                     文脈から考えて質問の前提に誤りがあると判断される場合のみ「質問誤り」と答えます。"""},
-                                    {"role": "user", "content": f"質問: {query}\n文脈: {context}"}
+                                    質問を入念に読み解きます。グラフDBの情報から、質問に関連する情報を抜き出して整理します。
+                                    なぜ、関連していると言えるのかも記載します。"""},
+                                    {"role": "user", "content": f"質問: {query}\n\n#グラフDB:{neo4j_data}"}
                                 ]
 
                             llm = ChatOpenAI(
                                 temperature=0,
-                                model="gpt-4o",
-                                functions=functions,
-                                function_call="auto"
+                                model="gpt-4o"
                             )
-                            response = llm(messages)
-                            st.write(messages)
-                            st.write(response)
+                            neo4j_data = llm(messages)
+                            neo4j_data = neo4j_data.content
+                            st.write(neo4j_data)
 
-                            # Check for function call response
-                            if hasattr(response, 'additional_kwargs') and 'function_call' in response.additional_kwargs:
-                                function_call = response.additional_kwargs['function_call']
-                                if function_call['name'] == "multiply":
-                                    arguments = json.loads(function_call['arguments'])
-                                    x_args = arguments.get('x')
-                                    y_args = arguments.get('y')
-                                    quote_args = arguments.get('quote')
+                            metadata_response_json = metadata_based_gpt_response(query, st.session_state.metadata_df, selected_file, llm)
 
-                                    # 数値に変換する部分を追加
-                                    try:
-                                        x_value = float(x_args)
-                                        y_value = float(y_args)
-                                    except ValueError:
-                                        z_multiply = f"Invalid input: x={x_args}, y={y_args} must be numbers"
-                                    else:
-                                        z_multiply = multiply_fun(x_value, y_value)  # Call the multiply function
+                            st.subheader("Metadata-based Answer:")
+                            st.write(metadata_response_json["Metadata_based_Answer"])
 
-                                    # Create a new message with the calculation result
-                                    follow_up_message = [
-                                        {"role": "system", "content": "あなたは数学者です。慎重に質問を読み解いて、変数を用いて計算します。質問に対して簡潔な回答を作成してください。計算結果を元に根拠を示してください。"},
-                                        {"role": "user", "content": f"質問: {query}\n\n変数: {x_value}, {y_value}\n\n#文脈:\n{quote_args}"}
-                                    ]
-                                    st.write(follow_up_message)
+                            # メタデータからの回答が不十分な場合、RAGでの回答処理を行う
+                            if metadata_response_json["Sufficiency"] == "不十分":
+                                st.write("メタデータからの回答が不十分でした。RAGを実行して詳細な情報を検索します。")
 
-                                    llm = ChatOpenAI(
-                                        temperature=0,
-                                        model="gpt-4o",
-                                        functions=functions,
-                                        function_call={"name": "get_short_answer_with_quote"}
-                                    )
+                                # キーワードが抽出できた場合、キーワード検索と類似度検索を行う
+                                if filtered_keywords and any(keyword_hits.values()):
+                                    # キーワード検索でヒットしたチャンクを検索対象にして、類似度検索を実行
+                                    st.write("キーワード検索でヒットしたチャンクを検索対象にして、類似度検索を実行します。")
 
-                                    # Generate the final response
-                                    response = llm(follow_up_message)
-                                    st.write(response)
+                                    # クエリのベクトルを取得
+                                    embeddings = OpenAIEmbeddings(model="text-embedding-3-small")
+                                    query_vector = embeddings.embed_query(query)
 
-                            # 回答と引用文の取得
-                            if hasattr(response, 'additional_kwargs') and 'function_call' in response.additional_kwargs:
-                                function_call = response.additional_kwargs['function_call']
-                                arguments = json.loads(function_call['arguments'])
-                                short_answer = arguments.get('answer', '分かりません')
-                                supporting_quote = arguments.get('quote', '分かりません')
-                                
-                                # contextだけでなく、low_freq_keyword_sentencesにも含まれているかどうかをチェック
+                                    # ヒットしたチャンクのベクトルとキーワードTF-IDFスコアを計算
+                                    chunk_vectors = []
+                                    keyword_tf_idf_scores = []
+                                    for doc in matched_chunks:
+                                        # チャンクのベクトルを計算
+                                        chunk_vector = embeddings.embed_query(doc.page_content)
+                                        chunk_vectors.append(chunk_vector)
+
+                                        # チャンク内のキーワード出現頻度（TF）を計算
+                                        doc_content = normalize_text(doc.page_content)
+                                        tf_scores = {}
+                                        for keyword in extracted_keywords:
+                                            keyword_normalized = normalize_text(keyword)
+                                            count = doc_content.count(keyword_normalized)
+                                            if count > 0:
+                                                tf_scores[keyword] = 1 + math.log(count)
+                                            else:
+                                                tf_scores[keyword] = 0.0
+
+                                        # IDFを計算（既に計算済みのkeyword_idfを使用）
+                                        tf_idf = 0.0
+                                        for keyword, tf in tf_scores.items():
+                                            idf = keyword_idf.get(keyword, 0.0)
+                                            tf_idf += tf * idf
+
+                                        keyword_tf_idf_scores.append(tf_idf)
+
+                                    # ベクトル類似度スコアを計算
+                                    vector_scores = [np.dot(query_vector, chunk_vector) for chunk_vector in chunk_vectors]
+
+                                    # スコアの正規化
+                                    epsilon = 1e-8  # ゼロ除算を防ぐための小さな値
+                                    vector_scores = np.array(vector_scores)
+                                    keyword_tf_idf_scores = np.array(keyword_tf_idf_scores)
+
+                                    # ベクトルスコアの正規化（0から1の範囲）
+                                    vector_scores_norm = (vector_scores - vector_scores.min()) / (vector_scores.max() - vector_scores.min() + epsilon)
+                                    # キーワードTF-IDFスコアの正規化（0から1の範囲）
+                                    keyword_scores_norm = (keyword_tf_idf_scores - keyword_tf_idf_scores.min()) / (keyword_tf_idf_scores.max() - keyword_tf_idf_scores.min() + epsilon)
+
+                                    # ベクトルスコアとキーワードTF-IDFスコアを組み合わせて総合スコアを計算
+                                    combined_scores = alpha * vector_scores_norm + beta * keyword_scores_norm
+
+                                    # チャンクと総合スコアを組み合わせる
+                                    chunk_scores = list(zip(matched_chunks, combined_scores))
+
+                                    # 総合スコアに基づいてチャンクをソート
+                                    sorted_chunks = sorted(chunk_scores, key=lambda x: x[1], reverse=True)  # 降順にソート
+
+                                    # 上位のチャンクを取得
+                                    docs = [doc for doc, score in sorted_chunks][:4]
+                                    st.write(docs)
+
+                                # キーワードが抽出されなかった場合、ベクトル検索のみ実行
+                                else:
+                                    st.write("キーワードが抽出されなかったため、通常のベクトル検索結果を使用します。")
+                                    retrieved_docs = st.session_state.vectorstore.similarity_search(query, k=10)
+                                    docs = [doc for doc in retrieved_docs][:3]
+
+                                # 回答の生成（Function Calling）
+                                context = "\n".join([doc.page_content for doc in docs])
+
+                                # キーワードとその登場回数を含めた文字列
+                                keyword_hits_str = "\n".join([f"{keyword}: {count}" for keyword, count in keyword_hits.items()])
+
+                                # 10回以下のキーワードを抽出
+                                low_frequency_keywords = {keyword: count for keyword, count in keyword_hits.items() if count <= 20}
+
+                                # 10回以下のキーワードを別の文字列として出力
+                                low_frequency_keywords_str = "\n".join([f"{keyword}: {count}" for keyword, count in low_frequency_keywords.items()])
+
+                                # 必要に応じて、出力部分に追加
+                                st.write(f"10回以下のキーワード:\n{low_frequency_keywords_str}")
+
+                                # 辞書を使用してキーワードごとの文を格納
+                                low_freq_keyword_sentences = {}
+
+                                for keyword in low_frequency_keywords:
+                                    sentences_set = set()  # 重複を排除するためにセットを使用
+                                    keyword_normalized = normalize_text(keyword)
+                                    # matched_chunksがリストの場合、ファイルごとに分ける処理が不要なので、単純なループに変更
+                                    for doc in matched_chunks:
+                                        # 文単位で分割
+                                        sentences = doc.page_content.split('。')
+                                        for sentence in sentences:
+                                            sentence_normalized = normalize_text(sentence)
+                                            if keyword_normalized in sentence_normalized:
+                                                sentences_set.add(sentence.strip())  # 前後の空白を削除して追加
+                                    low_freq_keyword_sentences[keyword] = list(sentences_set)  # セットをリストに変換
+
+                                # contextを文ごとに分割してリストに格納
                                 context_sentences = context.split('。')
-                                in_context = supporting_quote in context_sentences
+
+                                # 低頻度キーワードとその文の出力
+                                low_freq_keyword_sentences_str = ""
+
+                                for keyword, sentences in low_freq_keyword_sentences.items():
+                                    # 各文がcontextに含まれていない場合のみ追加
+                                    for sentence in sentences:
+                                        if sentence not in context_sentences:  # contextに含まれている文を除外
+                                            low_freq_keyword_sentences_str += f"- {sentence}。\n"
+                                    
+                                    low_freq_keyword_sentences_str += "\n"
+
+                                # 出力部分に追加
+                                st.write(f"10回以下のキーワードに含まれる文（contextに含まれないもの）:\n{low_freq_keyword_sentences_str}")
                                 
-                                in_low_freq_keywords = any(supporting_quote in sentences for sentences in low_freq_keyword_sentences.values())
-                                
-                                if not in_context and not in_low_freq_keywords:
+                                # keyword_hitsが定義されていて、かつ空でない場合のみ処理する
+                                if 'keyword_hits' in locals() and keyword_hits is not None and any(keyword_hits.values()):
+                                    keyword_hits_str = "\n".join([f"{keyword}: {count}" for keyword, count in keyword_hits.items()])
+                                    # メッセージにキーワードとその登場回数を含める
+                                    messages = [
+                                        {"role": "system", "content": """
+                                        ①「総額」や「いくら？」などの計算に関する質問の場合、自分で計算を行わなわず、必ずmultiply関数を呼び出してください。
+                                        ②その他の質問の場合、get_short_answer_with_quote関数を呼び出し、回答を作成し、その根拠を引用してください。必ず、引用は”本文”から文章を"そのまま"抜き出します。
+                                        - 回答は、質問に対して厳密（”～以上”などの細かい表現に注意する）かつ簡潔（50字以内）にします。
+                                        - 文書全体を調べた結果判明したグラフDBを参考にし、その内容を本文と合わせて理解します。
+                                        - 論理的に明らかに質問の前提に誤りがあると判断される場合は「質問誤り」と答えます。"""},
+                                        {"role": "user", "content": f"質問: {query}\n\n#本文:\n{context}\n\n{low_freq_keyword_sentences_str}\n\n#グラフDB（参考）:\n{neo4j_data}"}
+                                    ]
+                                else:  # keyword_hitsが存在しないか、空の場合
+                                    # メッセージにキーワードとその登場回数を含めない
+                                    messages = [
+                                        {"role": "system", "content": """
+                                        質問に対して厳密（”～以上”などの細かい表現に注意する）かつ簡潔な回答（50字以内）を作成し、その根拠を引用してください。
+                                        文脈から考えて質問の前提に誤りがあると判断される場合のみ「質問誤り」と答えます。"""},
+                                        {"role": "user", "content": f"質問: {query}\n文脈: {context}"}
+                                    ]
+
+                                llm = ChatOpenAI(
+                                    temperature=0,
+                                    model="gpt-4o",
+                                    functions=functions,
+                                    function_call="auto"
+                                )
+                                response = llm(messages)
+                                st.write(messages)
+                                st.write(response)
+
+                                # Check for function call response
+                                if hasattr(response, 'additional_kwargs') and 'function_call' in response.additional_kwargs:
+                                    function_call = response.additional_kwargs['function_call']
+                                    if function_call['name'] == "multiply":
+                                        arguments = json.loads(function_call['arguments'])
+                                        x_args = arguments.get('x')
+                                        y_args = arguments.get('y')
+                                        quote_args = arguments.get('quote')
+
+                                        # 数値に変換する部分を追加
+                                        try:
+                                            x_value = float(x_args)
+                                            y_value = float(y_args)
+                                        except ValueError:
+                                            z_multiply = f"Invalid input: x={x_args}, y={y_args} must be numbers"
+                                        else:
+                                            z_multiply = multiply_fun(x_value, y_value)  # Call the multiply function
+
+                                        # Create a new message with the calculation result
+                                        follow_up_message = [
+                                            {"role": "system", "content": "あなたは数学者です。慎重に質問を読み解いて、変数を用いて計算します。質問に対して簡潔な回答を作成してください。計算結果を元に根拠を示してください。"},
+                                            {"role": "user", "content": f"質問: {query}\n\n変数: {x_value}, {y_value}\n\n#文脈:\n{quote_args}"}
+                                        ]
+                                        st.write(follow_up_message)
+
+                                        llm = ChatOpenAI(
+                                            temperature=0,
+                                            model="gpt-4o",
+                                            functions=functions,
+                                            function_call={"name": "get_short_answer_with_quote"}
+                                        )
+
+                                        # Generate the final response
+                                        response = llm(follow_up_message)
+                                        st.write(response)
+
+                                # 回答と引用文の取得
+                                if hasattr(response, 'additional_kwargs') and 'function_call' in response.additional_kwargs:
+                                    function_call = response.additional_kwargs['function_call']
+                                    arguments = json.loads(function_call['arguments'])
+                                    short_answer = arguments.get('answer', '分かりません')
+                                    supporting_quote = arguments.get('quote', '分かりません')
+                                    
+                                    # contextだけでなく、low_freq_keyword_sentencesにも含まれているかどうかをチェック
+                                    context_sentences = context.split('。')
+                                    in_context = supporting_quote in context_sentences
+                                    
+                                    in_low_freq_keywords = any(supporting_quote in sentences for sentences in low_freq_keyword_sentences.values())
+                                    
+                                    if not in_context and not in_low_freq_keywords:
+                                        st.write(supporting_quote)
+                                        supporting_quote = "分かりません"
+                                    
                                     st.write(supporting_quote)
+                                    
+                                else:
+                                    short_answer = response.content
                                     supporting_quote = "分かりません"
-                                
+                                    st.write(supporting_quote)
+
+                                # 関連チャンクの番号と先頭100文字を表示
+                                st.subheader("Related Chunks:")
+                                for doc in docs:
+                                    chunk_id = doc.metadata.get('chunk_id', '不明')
+                                    chunk_content = doc.page_content[:100]
+                                    st.write(f"**Chunk ID:** {chunk_id}")
+                                    st.write(f"**Content:** {chunk_content}...")
+                                    st.markdown("---")
+
+                                # 回答表示
+                                st.subheader("RAG-based Answer:")
+                                st.write(short_answer)
+                                st.subheader("Supporting Quote:")
                                 st.write(supporting_quote)
-                                
-                            else:
-                                short_answer = response.content
-                                supporting_quote = "分かりません"
-                                st.write(supporting_quote)
 
-                            # 関連チャンクの番号と先頭100文字を表示
-                            st.subheader("Related Chunks:")
-                            for doc in docs:
-                                chunk_id = doc.metadata.get('chunk_id', '不明')
-                                chunk_content = doc.page_content[:100]
-                                st.write(f"**Chunk ID:** {chunk_id}")
-                                st.write(f"**Content:** {chunk_content}...")
-                                st.markdown("---")
+                        else:
+                            st.error("指定されたファイルが見つかりませんでした。")
 
-                            # 回答表示
-                            st.subheader("RAG-based Answer:")
-                            st.write(short_answer)
-                            st.subheader("Supporting Quote:")
-                            st.write(supporting_quote)
+                    except Exception as e:
+                        st.error(f"An error occurred: {str(e)}")
 
-                    else:
-                        st.error("指定されたファイルが見つかりませんでした。")
+        # 右側のカラム（メタデータ、チャンク確認）
+        with col2:
+            st.header("Document Metadata")
 
-                except Exception as e:
-                    st.error(f"An error occurred: {str(e)}")
+            if not st.session_state.metadata_df.empty:
+                # Synopsis Displayカラムを追加して表示
+                if 'Synopsis Display' in st.session_state.metadata_df.columns:
+                    st.session_state.metadata_df['Synopsis Display'] = st.session_state.metadata_df['Synopsis Display'].apply(lambda x: x if isinstance(x, str) else '')
+                else:
+                    st.session_state.metadata_df['Synopsis Display'] = ''
 
-    # 右側のカラム（メタデータ、チャンク確認）
-    with col2:
-        st.header("Document Metadata")
+                # Charactersカラムを整形
+                if 'Characters' in st.session_state.metadata_df.columns:
+                    st.session_state.metadata_df['Characters'] = st.session_state.metadata_df['Characters'].apply(
+                        lambda x: format_characters(x) if isinstance(x, list) else str(x)
+                    )
 
-        if not st.session_state.metadata_df.empty:
-            # Synopsis Displayカラムを追加して表示
-            if 'Synopsis Display' in st.session_state.metadata_df.columns:
-                st.session_state.metadata_df['Synopsis Display'] = st.session_state.metadata_df['Synopsis Display'].apply(lambda x: x if isinstance(x, str) else '')
+                # 不要なSynopsisカラムの表示を避けるため、必要に応じて削除または非表示に設定
+                display_df = st.session_state.metadata_df.copy()
+                if 'Synopsis' in display_df.columns:
+                    display_df = display_df.drop(columns=['Synopsis'])
+                display_df = display_df.rename(columns={'Synopsis Display': 'Synopsis'})
+
+                # すべてのカラムを文字列型に変換
+                display_df = display_df.astype(str)
+
+                # データフレームを表示
+                st.dataframe(display_df)
             else:
-                st.session_state.metadata_df['Synopsis Display'] = ''
+                st.info("No metadata available.")
 
-            # Charactersカラムを整形
-            if 'Characters' in st.session_state.metadata_df.columns:
-                st.session_state.metadata_df['Characters'] = st.session_state.metadata_df['Characters'].apply(
-                    lambda x: format_characters(x) if isinstance(x, list) else str(x)
-                )
+            st.header("Document Chunks")
+            st.write(f"Current Files: {', '.join(st.session_state.current_files)}")
 
-            # 不要なSynopsisカラムの表示を避けるため、必要に応じて削除または非表示に設定
-            display_df = st.session_state.metadata_df.copy()
-            if 'Synopsis' in display_df.columns:
-                display_df = display_df.drop(columns=['Synopsis'])
-            display_df = display_df.rename(columns={'Synopsis Display': 'Synopsis'})
+            if st.session_state.split_docs:
+                # チャンクデータをDataFrameに変換
+                chunk_data = []
+                for file, docs in st.session_state.split_docs.items():
+                    for doc in docs:
+                        chunk_data.append({
+                            "Source": doc.metadata['source'],
+                            "Chunk ID": doc.metadata['chunk_id'],
+                            "Content": doc.page_content[:100] + "..."  # 最初の100文字を表示
+                        })
+                df = pd.DataFrame(chunk_data)
 
-            # すべてのカラムを文字列型に変換
-            display_df = display_df.astype(str)
-
-            # データフレームを表示
-            st.dataframe(display_df)
-        else:
-            st.info("No metadata available.")
-
-        st.header("Document Chunks")
-        st.write(f"Current Files: {', '.join(st.session_state.current_files)}")
-
-        if st.session_state.split_docs:
-            # チャンクデータをDataFrameに変換
-            chunk_data = []
-            for file, docs in st.session_state.split_docs.items():
-                for doc in docs:
-                    chunk_data.append({
-                        "Source": doc.metadata['source'],
-                        "Chunk ID": doc.metadata['chunk_id'],
-                        "Content": doc.page_content[:100] + "..."  # 最初の100文字を表示
-                    })
-            df = pd.DataFrame(chunk_data)
-
-            # データが存在する場合のみ表示
-            if not df.empty:
-                st.dataframe(df)
+                # データが存在する場合のみ表示
+                if not df.empty:
+                    st.dataframe(df)
+                else:
+                    st.info("No document chunks available.")
             else:
                 st.info("No document chunks available.")
-        else:
-            st.info("No document chunks available.")
 
-elif st.session_state.mode == 'RAG' and not st.session_state.document_processed:
-    st.info("Please upload and process a document first to use RAG mode.")
+    else:
+        st.info("Please upload and process a document first to use RAG mode.")
 
-else:  # Simple Chat mode
+elif st.session_state.mode == 'Simple Chat':  # Simple Chat mode
     st.header("Simple Chat")
-    query = st.text_input("Enter your question:")
+    st.session_state.query = st.text_input("Enter your question:", value=st.session_state.query)
+
     if st.button("Ask (Simple)"):
         with st.spinner("Generating answer..."):
             try:
                 llm = ChatOpenAI(temperature=0, model="gpt-4o-mini")
-                response = llm.invoke(query)
-                st.subheader("Answer:")
-                st.write(response)
+                response = llm.invoke(st.session_state.query)
+                st.session_state.response = response.content
             except Exception as e:
                 st.error(f"An error occurred while generating the answer: {str(e)}")
+
+    if st.session_state.response:
+        st.subheader("Answer:")
+        st.write(st.session_state.response)
 
 # 一時ファイルの削除
 if 'tmp_file_path' in locals():
