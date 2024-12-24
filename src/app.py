@@ -425,10 +425,10 @@ st.title("RAG System Demo")
 # セッション状態の初期化
 if 'mode' not in st.session_state:
     st.session_state.mode = 'RAG'
-if 'query' not in st.session_state:
-    st.session_state.query = ''
-if 'response' not in st.session_state:
-    st.session_state.response = None
+if 'chat_history' not in st.session_state:
+        st.session_state.chat_history = []
+if 'current_input' not in st.session_state:
+    st.session_state.current_input = ''
 if 'data_loaded' not in st.session_state:
     st.session_state.data_loaded = False
 if 'vectorstore' not in st.session_state:
